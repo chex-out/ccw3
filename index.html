@@ -99,13 +99,14 @@
             <div class="glass-effect rounded-2xl p-6 bg-yellow-900/20 border-yellow-600">
                 <h3 class="text-lg font-bold text-yellow-400 mb-3">🔑 API Key Required for Judging</h3>
                 <p class="text-sm text-gray-300 mb-3">
-                    To get AI-powered judging, you need an Anthropic API key. Get one free at 
+                    To get AI-powered judging, you need an Anthropic API key. Get one at 
                     <a href="https://console.anthropic.com/" target="_blank" class="text-yellow-400 underline">console.anthropic.com</a>
+                    (requires billing setup - minimum $5).
                 </p>
                 <input type="password" id="apiKey" placeholder="Enter your API key (sk-ant-...)" 
                        class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-yellow-600 focus:border-yellow-500 focus:outline-none">
                 <p class="text-xs text-gray-400 mt-2">
-                    Your key is only used in your browser and never stored. Each judgment costs ~$0.01-0.03.
+                    Your key is sent via CORS proxy (corsproxy.io) to bypass browser restrictions. Each judgment costs ~$0.01-0.03.
                 </p>
             </div>
 
@@ -469,7 +470,11 @@ Make the scoring difference clear - Paik is the generous one, Anh is the tough c
                         }
                     ];
 
-                    const response = await fetch("https://api.anthropic.com/v1/messages", {
+                    // Use CORS proxy for GitHub Pages hosting
+                    const corsProxy = 'https://corsproxy.io/?';
+                    const apiUrl = corsProxy + encodeURIComponent('https://api.anthropic.com/v1/messages');
+                    
+                    const response = await fetch(apiUrl, {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json",
