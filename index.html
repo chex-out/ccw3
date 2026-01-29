@@ -199,9 +199,14 @@
             color: #155724;
         }
 
-        .waiting {
+        .warning {
             background: #fff3cd;
             color: #856404;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
         }
 
         .loading {
@@ -235,6 +240,35 @@
             font-size: 13px;
             color: #666;
             margin-bottom: 15px;
+        }
+
+        .setup-note {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .setup-note h3 {
+            color: #856404;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .setup-note p {
+            color: #856404;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+
+        .setup-note code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #d63384;
         }
     </style>
 </head>
@@ -292,7 +326,7 @@
                 <div style="font-size: 14px; color: #666; margin-bottom: 5px;">Session Code:</div>
                 <strong id="waitingSessionCode"></strong>
             </div>
-            <div class="status-message waiting">
+            <div class="status-message warning">
                 Waiting for all participants to submit...
             </div>
             <div style="font-weight: 600; margin-bottom: 10px; color: #333;">Participants:</div>
@@ -311,7 +345,7 @@
 
         <!-- Results Waiting Screen -->
         <div id="resultsWaitingScreen" class="screen">
-            <div class="status-message waiting">
+            <div class="status-message warning">
                 Waiting for everyone to submit their guesses...
             </div>
             <div class="loading">
@@ -330,16 +364,55 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, set, get, onValue, update } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+        let db = null;
         let currentSession = null;
         let currentUser = null;
         let isHost = false;
-        let checkInterval = null;
+        let sessionListener = null;
+        
         const pseudonyms = [
             "Mysterious Phoenix", "Enigmatic Dragon", "Curious Panda", "Witty Dolphin",
             "Clever Fox", "Bold Eagle", "Swift Cheetah", "Gentle Koala",
             "Mighty Lion", "Wise Owl", "Playful Otter", "Noble Wolf"
         ];
+
+        // Firebase configuration - hardcoded
+        const firebaseConfig = {
+            apiKey: "AIzaSyDoQd8G-NsUDp5dB-Vd8FuJRgwjwGmWhAQ",
+            authDomain: "icebreaker-game-ag.firebaseapp.com",
+            databaseURL: "https://icebreaker-game-ag-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "icebreaker-game-ag",
+            storageBucket: "icebreaker-game-ag.firebasestorage.app",
+            messagingSenderId: "613019262989",
+            appId: "1:613019262989:web:3f84b652aaf0edc3b1b544"
+        };
+
+        // Initialize Firebase on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeFirebase(firebaseConfig);
+        });
+
+        function initializeFirebase(config) {
+            try {
+                const app = initializeApp(config);
+                db = getDatabase(app);
+                window.db = db;
+                window.dbRef = ref;
+                window.dbSet = set;
+                window.dbGet = get;
+                window.dbOnValue = onValue;
+                window.dbUpdate = update;
+                return true;
+            } catch (error) {
+                console.error('Firebase initialization error:', error);
+                alert('Error connecting to game server. Please refresh the page.');
+                return false;
+            }
+        }
 
         function generateSessionCode() {
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -350,37 +423,52 @@
             return code;
         }
 
-        async function createSession() {
+        window.createSession = async function() {
+            if (!db) {
+                alert('Game server not ready. Please refresh the page.');
+                return;
+            }
+
             const sessionCode = generateSessionCode();
             const sessionData = {
                 code: sessionCode,
                 host: null,
                 participants: [],
-                phase: 'setup', // setup, guessing, results
-                guesses: []
+                phase: 'setup',
+                guesses: [],
+                createdAt: Date.now()
             };
 
             try {
-                await window.storage.set(`session:${sessionCode}`, JSON.stringify(sessionData), true);
+                await window.dbSet(window.dbRef(db, `sessions/${sessionCode}`), sessionData);
                 currentSession = sessionCode;
                 isHost = true;
                 showScreen('hostSetupScreen');
                 document.getElementById('hostSessionCode').textContent = sessionCode;
             } catch (error) {
-                alert('Error creating session. Please try again.');
+                alert('Error creating session: ' + error.message);
                 console.error(error);
             }
-        }
+        };
 
-        function showJoinScreen() {
+        window.showJoinScreen = function() {
             showScreen('joinScreen');
-        }
+        };
 
-        function showHomeScreen() {
+        window.showHomeScreen = function() {
+            if (sessionListener) {
+                sessionListener();
+                sessionListener = null;
+            }
             showScreen('homeScreen');
-        }
+        };
 
-        async function joinSession() {
+        window.joinSession = async function() {
+            if (!db) {
+                alert('Game server not ready. Please refresh the page.');
+                return;
+            }
+
             const code = document.getElementById('sessionCodeInput').value.toUpperCase().trim();
             if (!code) {
                 alert('Please enter a session code');
@@ -388,8 +476,8 @@
             }
 
             try {
-                const result = await window.storage.get(`session:${code}`, true);
-                if (!result) {
+                const snapshot = await window.dbGet(window.dbRef(db, `sessions/${code}`));
+                if (!snapshot.exists()) {
                     alert('Session not found. Please check the code and try again.');
                     return;
                 }
@@ -399,12 +487,12 @@
                 showScreen('participantSetupScreen');
                 document.getElementById('participantSessionCode').textContent = code;
             } catch (error) {
-                alert('Session not found. Please check the code and try again.');
+                alert('Error joining session: ' + error.message);
                 console.error(error);
             }
-        }
+        };
 
-        async function hostSubmitInfo() {
+        window.hostSubmitInfo = async function() {
             const name = document.getElementById('hostNameInput').value.trim();
             const fact = document.getElementById('hostFactInput').value.trim();
 
@@ -414,11 +502,11 @@
             }
 
             try {
-                const result = await window.storage.get(`session:${currentSession}`, true);
-                const sessionData = JSON.parse(result.value);
-                
                 const userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 currentUser = userId;
+
+                const snapshot = await window.dbGet(window.dbRef(db, `sessions/${currentSession}`));
+                const sessionData = snapshot.val();
 
                 sessionData.host = userId;
                 sessionData.participants.push({
@@ -428,17 +516,17 @@
                     submitted: true
                 });
 
-                await window.storage.set(`session:${currentSession}`, JSON.stringify(sessionData), true);
+                await window.dbSet(window.dbRef(db, `sessions/${currentSession}`), sessionData);
                 
                 showWaitingRoom();
-                startPolling();
+                startListening();
             } catch (error) {
-                alert('Error submitting information. Please try again.');
+                alert('Error submitting information: ' + error.message);
                 console.error(error);
             }
-        }
+        };
 
-        async function participantSubmitInfo() {
+        window.participantSubmitInfo = async function() {
             const name = document.getElementById('participantNameInput').value.trim();
             const fact = document.getElementById('participantFactInput').value.trim();
 
@@ -448,11 +536,11 @@
             }
 
             try {
-                const result = await window.storage.get(`session:${currentSession}`, true);
-                const sessionData = JSON.parse(result.value);
-                
                 const userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 currentUser = userId;
+
+                const snapshot = await window.dbGet(window.dbRef(db, `sessions/${currentSession}`));
+                const sessionData = snapshot.val();
 
                 sessionData.participants.push({
                     id: userId,
@@ -461,106 +549,92 @@
                     submitted: true
                 });
 
-                await window.storage.set(`session:${currentSession}`, JSON.stringify(sessionData), true);
+                await window.dbSet(window.dbRef(db, `sessions/${currentSession}`), sessionData);
                 
                 showWaitingRoom();
-                startPolling();
+                startListening();
             } catch (error) {
-                alert('Error submitting information. Please try again.');
+                alert('Error submitting information: ' + error.message);
                 console.error(error);
             }
-        }
+        };
 
-        async function showWaitingRoom() {
+        function showWaitingRoom() {
             showScreen('waitingScreen');
             document.getElementById('waitingSessionCode').textContent = currentSession;
-            await updateParticipantsList();
         }
 
-        async function updateParticipantsList() {
-            try {
-                const result = await window.storage.get(`session:${currentSession}`, true);
-                const sessionData = JSON.parse(result.value);
-                
-                const list = document.getElementById('participantsList');
-                list.innerHTML = '';
-                
-                sessionData.participants.forEach(p => {
-                    const div = document.createElement('div');
-                    div.className = 'participant';
-                    div.innerHTML = `
-                        <span class="participant-name">${p.name}</span>
-                        <span style="color: #28a745;">✓</span>
-                    `;
-                    list.appendChild(div);
-                });
+        function updateParticipantsList(sessionData) {
+            const list = document.getElementById('participantsList');
+            list.innerHTML = '';
+            
+            sessionData.participants.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'participant';
+                div.innerHTML = `
+                    <span class="participant-name">${p.name}</span>
+                    <span style="color: #28a745;">✓</span>
+                `;
+                list.appendChild(div);
+            });
 
-                // Show start button for host if 2+ participants
-                if (isHost && sessionData.participants.length >= 2) {
-                    document.getElementById('startGuessingBtn').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Error updating participants:', error);
+            if (isHost && sessionData.participants.length >= 2) {
+                document.getElementById('startGuessingBtn').style.display = 'block';
             }
         }
 
-        function startPolling() {
-            if (checkInterval) clearInterval(checkInterval);
-            
-            checkInterval = setInterval(async () => {
-                try {
-                    const result = await window.storage.get(`session:${currentSession}`, true);
-                    const sessionData = JSON.parse(result.value);
+        function startListening() {
+            if (sessionListener) {
+                sessionListener();
+            }
+
+            sessionListener = window.dbOnValue(window.dbRef(db, `sessions/${currentSession}`), (snapshot) => {
+                const sessionData = snapshot.val();
+                if (!sessionData) return;
+
+                const currentScreen = document.querySelector('.screen.active').id;
+
+                if (currentScreen === 'waitingScreen') {
+                    updateParticipantsList(sessionData);
                     
-                    // Update participant list if in waiting room
-                    if (document.getElementById('waitingScreen').classList.contains('active')) {
-                        await updateParticipantsList();
-                        
-                        // Check if phase changed to guessing
-                        if (sessionData.phase === 'guessing') {
-                            showGuessingScreen(sessionData);
-                        }
+                    if (sessionData.phase === 'guessing') {
+                        showGuessingScreen(sessionData);
                     }
-                    
-                    // Check if in results waiting and phase changed to results
-                    if (document.getElementById('resultsWaitingScreen').classList.contains('active')) {
-                        if (sessionData.phase === 'results') {
-                            showResultsScreen(sessionData);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Polling error:', error);
                 }
-            }, 2000);
+                
+                if (currentScreen === 'resultsWaitingScreen') {
+                    if (sessionData.phase === 'results') {
+                        showResultsScreen(sessionData);
+                    }
+                }
+            });
         }
 
-        async function startGuessing() {
+        window.startGuessing = async function() {
             try {
-                const result = await window.storage.get(`session:${currentSession}`, true);
-                const sessionData = JSON.parse(result.value);
+                const snapshot = await window.dbGet(window.dbRef(db, `sessions/${currentSession}`));
+                const sessionData = snapshot.val();
                 
-                // Assign pseudonyms
                 const shuffledPseudonyms = [...pseudonyms].sort(() => Math.random() - 0.5);
                 sessionData.participants.forEach((p, i) => {
                     p.pseudonym = shuffledPseudonyms[i];
                 });
                 
                 sessionData.phase = 'guessing';
-                await window.storage.set(`session:${currentSession}`, JSON.stringify(sessionData), true);
+                await window.dbSet(window.dbRef(db, `sessions/${currentSession}`), sessionData);
                 
                 showGuessingScreen(sessionData);
             } catch (error) {
-                alert('Error starting game. Please try again.');
+                alert('Error starting game: ' + error.message);
                 console.error(error);
             }
-        }
+        };
 
         function showGuessingScreen(sessionData) {
             showScreen('guessingScreen');
             const area = document.getElementById('guessingArea');
             area.innerHTML = '';
             
-            // Shuffle participants for display
             const shuffled = [...sessionData.participants].sort(() => Math.random() - 0.5);
             
             shuffled.forEach(p => {
@@ -568,7 +642,7 @@
                 card.className = 'fun-fact-card';
                 
                 const select = document.createElement('select');
-                select.id = `guess_${p.pseudonym}`;
+                select.id = `guess_${p.pseudonym.replace(/\s/g, '_')}`;
                 select.innerHTML = '<option value="">-- Select a person --</option>';
                 
                 sessionData.participants.forEach(participant => {
@@ -587,16 +661,16 @@
             });
         }
 
-        async function submitGuesses() {
+        window.submitGuesses = async function() {
             try {
-                const result = await window.storage.get(`session:${currentSession}`, true);
-                const sessionData = JSON.parse(result.value);
+                const snapshot = await window.dbGet(window.dbRef(db, `sessions/${currentSession}`));
+                const sessionData = snapshot.val();
                 
                 const guesses = {};
                 let allAnswered = true;
                 
                 sessionData.participants.forEach(p => {
-                    const select = document.getElementById(`guess_${p.pseudonym}`);
+                    const select = document.getElementById(`guess_${p.pseudonym.replace(/\s/g, '_')}`);
                     if (select) {
                         const guessedId = select.value;
                         if (!guessedId) {
@@ -611,10 +685,9 @@
                     return;
                 }
                 
-                // Save user's guesses
-                const existingGuess = sessionData.guesses.find(g => g.userId === currentUser);
-                if (existingGuess) {
-                    existingGuess.guesses = guesses;
+                const existingGuessIndex = sessionData.guesses.findIndex(g => g.userId === currentUser);
+                if (existingGuessIndex !== -1) {
+                    sessionData.guesses[existingGuessIndex].guesses = guesses;
                 } else {
                     sessionData.guesses.push({
                         userId: currentUser,
@@ -622,31 +695,31 @@
                     });
                 }
                 
-                await window.storage.set(`session:${currentSession}`, JSON.stringify(sessionData), true);
-                
-                // Check if all have guessed
                 if (sessionData.guesses.length === sessionData.participants.length) {
                     sessionData.phase = 'results';
-                    await window.storage.set(`session:${currentSession}`, JSON.stringify(sessionData), true);
+                }
+                
+                await window.dbSet(window.dbRef(db, `sessions/${currentSession}`), sessionData);
+                
+                if (sessionData.phase === 'results') {
                     showResultsScreen(sessionData);
                 } else {
                     showScreen('resultsWaitingScreen');
                 }
             } catch (error) {
-                alert('Error submitting guesses. Please try again.');
+                alert('Error submitting guesses: ' + error.message);
                 console.error(error);
             }
-        }
+        };
 
         function showResultsScreen(sessionData) {
-            if (checkInterval) {
-                clearInterval(checkInterval);
-                checkInterval = null;
+            if (sessionListener) {
+                sessionListener();
+                sessionListener = null;
             }
             
             showScreen('resultsScreen');
             
-            // Calculate score
             const userGuesses = sessionData.guesses.find(g => g.userId === currentUser);
             let score = 0;
             
@@ -660,7 +733,6 @@
             
             document.getElementById('scoreDisplay').textContent = `${score}/${sessionData.participants.length}`;
             
-            // Show results
             const resultsArea = document.getElementById('resultsArea');
             resultsArea.innerHTML = '';
             
@@ -683,27 +755,31 @@
             });
         }
 
-        function resetGame() {
-            if (checkInterval) {
-                clearInterval(checkInterval);
-                checkInterval = null;
+        window.resetGame = function() {
+            if (sessionListener) {
+                sessionListener();
+                sessionListener = null;
             }
             currentSession = null;
             currentUser = null;
             isHost = false;
             showScreen('homeScreen');
             
-            // Clear inputs
             document.getElementById('sessionCodeInput').value = '';
             document.getElementById('hostNameInput').value = '';
             document.getElementById('hostFactInput').value = '';
             document.getElementById('participantNameInput').value = '';
             document.getElementById('participantFactInput').value = '';
-        }
+        };
 
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(screenId).classList.add('active');
+        }
+
+        function showMessage(message, type) {
+            // Could implement toast notifications here
+            console.log(`${type}: ${message}`);
         }
     </script>
 </body>
