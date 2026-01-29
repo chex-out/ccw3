@@ -508,6 +508,11 @@
                 const snapshot = await window.dbGet(window.dbRef(db, `sessions/${currentSession}`));
                 const sessionData = snapshot.val();
 
+                // Ensure participants array exists
+                if (!sessionData.participants) {
+                    sessionData.participants = [];
+                }
+
                 sessionData.host = userId;
                 sessionData.participants.push({
                     id: userId,
@@ -542,6 +547,11 @@
                 const snapshot = await window.dbGet(window.dbRef(db, `sessions/${currentSession}`));
                 const sessionData = snapshot.val();
 
+                // Ensure participants array exists
+                if (!sessionData.participants) {
+                    sessionData.participants = [];
+                }
+
                 sessionData.participants.push({
                     id: userId,
                     name: name,
@@ -567,6 +577,11 @@
         function updateParticipantsList(sessionData) {
             const list = document.getElementById('participantsList');
             list.innerHTML = '';
+            
+            // Ensure participants array exists
+            if (!sessionData.participants) {
+                sessionData.participants = [];
+            }
             
             sessionData.participants.forEach(p => {
                 const div = document.createElement('div');
@@ -615,6 +630,11 @@
                 const snapshot = await window.dbGet(window.dbRef(db, `sessions/${currentSession}`));
                 const sessionData = snapshot.val();
                 
+                // Ensure participants array exists
+                if (!sessionData.participants) {
+                    sessionData.participants = [];
+                }
+                
                 const shuffledPseudonyms = [...pseudonyms].sort(() => Math.random() - 0.5);
                 sessionData.participants.forEach((p, i) => {
                     p.pseudonym = shuffledPseudonyms[i];
@@ -634,6 +654,11 @@
             showScreen('guessingScreen');
             const area = document.getElementById('guessingArea');
             area.innerHTML = '';
+            
+            // Ensure participants array exists
+            if (!sessionData.participants) {
+                sessionData.participants = [];
+            }
             
             const shuffled = [...sessionData.participants].sort(() => Math.random() - 0.5);
             
@@ -665,6 +690,14 @@
             try {
                 const snapshot = await window.dbGet(window.dbRef(db, `sessions/${currentSession}`));
                 const sessionData = snapshot.val();
+                
+                // Ensure participants and guesses arrays exist
+                if (!sessionData.participants) {
+                    sessionData.participants = [];
+                }
+                if (!sessionData.guesses) {
+                    sessionData.guesses = [];
+                }
                 
                 const guesses = {};
                 let allAnswered = true;
@@ -719,6 +752,14 @@
             }
             
             showScreen('resultsScreen');
+            
+            // Ensure participants and guesses arrays exist
+            if (!sessionData.participants) {
+                sessionData.participants = [];
+            }
+            if (!sessionData.guesses) {
+                sessionData.guesses = [];
+            }
             
             const userGuesses = sessionData.guesses.find(g => g.userId === currentUser);
             let score = 0;
