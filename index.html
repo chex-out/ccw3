@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Culinary Class Wars - Dinner Party Game</title>
+    <link rel="icon" href="https://brand.netflix.com/favicon.ico"/>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap');
@@ -455,6 +456,13 @@
                     return 0;
                 });
 
+                // Try multiple CORS proxies in order
+                const corsProxies = [
+                    'https://api.allorigins.win/raw?url=',
+                    'https://corsproxy.io/?',
+                    ''  // Direct call as last resort (may work in some browsers)
+                ];
+
                 const judgmentPromises = sortedSubmissions.map(async (sub) => {
                     const isMichelle = sub.contestantName.toLowerCase().includes('michelle');
                     
@@ -508,58 +516,84 @@ Make the scoring difference clear - Paik is the generous one, Anh is the tough c
                         }
                     ];
 
-                    // Use CORS proxy for GitHub Pages hosting
-                    const corsProxy = 'https://corsproxy.io/?';
-                    const apiUrl = corsProxy + encodeURIComponent('https://api.anthropic.com/v1/messages');
-                    
-                    const response = await fetch(apiUrl, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "x-api-key": apiKey,
-                            "anthropic-version": "2023-06-01"
-                        },
-                        body: JSON.stringify({
-                            model: "claude-sonnet-4-20250514",
-                            max_tokens: 2000,
-                            messages: [{ role: "user", content }]
-                        })
+                    const requestBody = JSON.stringify({
+                        model: "claude-sonnet-4-20250514",
+                        max_tokens: 2000,
+                        messages: [{ role: "user", content }]
                     });
 
-                    if (!response.ok) {
-                        let errorMessage = `API Error (${response.status})`;
+                    // Try each CORS proxy in sequence
+                    let lastError = null;
+                    for (let proxyIndex = 0; proxyIndex < corsProxies.length; proxyIndex++) {
                         try {
-                            const errorData = await response.json();
-                            console.error('API Error Details:', errorData);
+                            console.log(`Trying CORS proxy ${proxyIndex + 1}/${corsProxies.length}: ${corsProxies[proxyIndex] || 'Direct call'}`);
                             
-                            if (errorData.error?.type === 'authentication_error') {
-                                errorMessage = 'Authentication failed. Please check your API key is correct.';
-                            } else if (errorData.error?.type === 'permission_error') {
-                                errorMessage = 'Permission denied. Your API key may not have access to this model.';
-                            } else if (errorData.error?.type === 'invalid_request_error') {
-                                errorMessage = 'Invalid request: ' + (errorData.error?.message || 'Unknown error');
-                            } else if (response.status === 429) {
-                                errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
-                            } else if (response.status === 402) {
-                                errorMessage = 'Insufficient credits. Please add credits to your Anthropic account at console.anthropic.com';
-                            } else {
-                                errorMessage = errorData.error?.message || errorMessage;
-                            }
-                        } catch (e) {
-                            console.error('Could not parse error:', e);
-                        }
-                        throw new Error(errorMessage);
-                    }
+                            const apiUrl = corsProxies[proxyIndex] 
+                                ? corsProxies[proxyIndex] + encodeURIComponent('https://api.anthropic.com/v1/messages')
+                                : 'https://api.anthropic.com/v1/messages';
+                            
+                            const response = await fetch(apiUrl, {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "x-api-key": apiKey,
+                                    "anthropic-version": "2023-06-01"
+                                },
+                                body: requestBody
+                            });
 
-                    const data = await response.json();
-                    const judgment = data.content.find(c => c.type === 'text')?.text || 'Unable to get judgment';
+                            console.log(`Response status: ${response.status}`);
+
+                            if (!response.ok) {
+                                let errorMessage = `API Error (${response.status})`;
+                                try {
+                                    const errorData = await response.json();
+                                    console.error('API Error Details:', errorData);
+                                    
+                                    if (errorData.error?.type === 'authentication_error') {
+                                        errorMessage = 'Authentication failed. Please check your API key is correct.';
+                                    } else if (errorData.error?.type === 'permission_error') {
+                                        errorMessage = 'Permission denied. Your API key may not have access to this model.';
+                                    } else if (errorData.error?.type === 'invalid_request_error') {
+                                        errorMessage = 'Invalid request: ' + (errorData.error?.message || 'Unknown error');
+                                    } else if (response.status === 429) {
+                                        errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
+                                    } else if (response.status === 402) {
+                                        errorMessage = 'Insufficient credits. Please add credits to your Anthropic account at console.anthropic.com';
+                                    } else {
+                                        errorMessage = errorData.error?.message || errorMessage;
+                                    }
+                                } catch (e) {
+                                    console.error('Could not parse error:', e);
+                                }
+                                throw new Error(errorMessage);
+                            }
+
+                            const data = await response.json();
+                            const judgment = data.content.find(c => c.type === 'text')?.text || 'Unable to get judgment';
+                            
+                            console.log('Successfully got judgment');
+                            
+                            return {
+                                contestantName: sub.contestantName,
+                                dishName: sub.dishName,
+                                judgment,
+                                isMichelle
+                            };
+                        } catch (error) {
+                            console.error(`Proxy ${proxyIndex + 1} failed:`, error);
+                            lastError = error;
+                            
+                            // If this isn't the last proxy, try the next one
+                            if (proxyIndex < corsProxies.length - 1) {
+                                console.log('Trying next proxy...');
+                                continue;
+                            }
+                        }
+                    }
                     
-                    return {
-                        contestantName: sub.contestantName,
-                        dishName: sub.dishName,
-                        judgment,
-                        isMichelle
-                    };
+                    // If all proxies failed, throw the last error
+                    throw lastError;
                 });
 
                 const results = await Promise.all(judgmentPromises);
@@ -593,18 +627,34 @@ Make the scoring difference clear - Paik is the generous one, Anh is the tough c
                 
                 let userMessage = 'Error getting judgments:\n\n' + error.message;
                 
-                if (error.message.includes('Failed to fetch')) {
-                    userMessage += '\n\nPossible causes:\n';
-                    userMessage += '1. Network connectivity issue\n';
-                    userMessage += '2. CORS restriction (unlikely with Anthropic API)\n';
-                    userMessage += '3. API endpoint is down\n\n';
-                    userMessage += 'Please check your internet connection and try again.';
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    userMessage += '\n\n⚠️ TROUBLESHOOTING STEPS:\n\n';
+                    userMessage += '1. CHECK YOUR API KEY:\n';
+                    userMessage += '   - Go to console.anthropic.com\n';
+                    userMessage += '   - Make sure you have billing set up\n';
+                    userMessage += '   - Verify your API key is active\n\n';
+                    userMessage += '2. OPEN BROWSER CONSOLE (F12):\n';
+                    userMessage += '   - Look for detailed error messages\n';
+                    userMessage += '   - Check which proxy failed\n\n';
+                    userMessage += '3. TRY AGAIN:\n';
+                    userMessage += '   - Sometimes proxies are temporarily down\n';
+                    userMessage += '   - Wait 30 seconds and retry\n\n';
+                    userMessage += '4. ALTERNATIVE:\n';
+                    userMessage += '   - Download the HTML file\n';
+                    userMessage += '   - Open it locally (file:///)\n';
+                    userMessage += '   - This bypasses some CORS issues';
                 } else if (error.message.includes('credits')) {
-                    userMessage += '\n\nPlease visit console.anthropic.com to add credits to your account.';
+                    userMessage += '\n\n💳 Please visit console.anthropic.com to add credits to your account.';
+                } else if (error.message.includes('Authentication')) {
+                    userMessage += '\n\n🔑 Your API key appears to be invalid. Please:\n';
+                    userMessage += '1. Go to console.anthropic.com\n';
+                    userMessage += '2. Generate a new API key\n';
+                    userMessage += '3. Copy it carefully (starts with sk-ant-)';
                 }
                 
                 alert(userMessage);
                 console.error('Full error:', error);
+                console.error('Error stack:', error.stack);
             }
         }
 
