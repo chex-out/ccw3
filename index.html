@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Culinary Class Wars - Dinner Party Game</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="icon" href="https://brand.netflix.com/favicon.ico"/>
-    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap');
         
@@ -117,16 +115,24 @@
                 
                 <div class="space-y-6">
                     <div>
-                        <label class="block text-sm font-semibold mb-2">Contestant Name</label>
-                        <select id="contestantName" onchange="updateIngredients()"
+                        <label class="block text-sm font-semibold mb-2">Select Contestant Slot</label>
+                        <select id="contestantSlot" onchange="updateIngredients()"
                                class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-600 focus:border-red-500 focus:outline-none">
-                            <option value="">Select your contestant name...</option>
+                            <option value="">Select your contestant slot...</option>
                         </select>
+                        <p class="text-xs text-gray-400 mt-1">This determines your ingredients</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold mb-2">Your Name</label>
+                        <input type="text" id="contestantName" placeholder="Enter your name"
+                               class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-600 focus:border-red-500 focus:outline-none">
+                        <p class="text-xs text-gray-400 mt-1">You can customize this after selecting your slot</p>
                     </div>
 
                     <div>
                         <label class="block text-sm font-semibold mb-2">Your Ingredients</label>
-                        <textarea id="dishIngredients" placeholder="Select your contestant name first..."
+                        <textarea id="dishIngredients" placeholder="Select your contestant slot first..."
                                   class="w-full px-4 py-3 bg-gray-800 rounded-lg border border-gray-600 focus:border-red-500 focus:outline-none h-24" readonly></textarea>
                     </div>
 
@@ -195,15 +201,21 @@
     </div>
 
     <script>
-        const goodIngredients = [
-            "Alaskan King Crab", "Black Truffle", "Foie Gras", "Uni (Sea Urchin)",
-            "A5 Miyazaki Beef", "Bluefin Tuna", "White Alba Truffle", "Beluga Caviar", "Japanese Scallops",
-            "Wild Salmon", "Duck Breast", "Bone Marrow", "Lobster Tail", "Porcini Mushrooms",
-            "Aged Parmesan", "San Marzano Tomatoes", "Saffron", "Doenjang", "Yuzu",
-            "Miso Paste", "Gochujang", "Kombu Seaweed", "Shiso Leaves", "Korean Pear",
-            "Fresh Burrata", "Prosciutto di Parma", "Extra Virgin Olive Oil", "Fresh Basil", "Heirloom Tomatoes",
-            "King Oyster Mushrooms", "Shiitake Mushrooms", "Sesame Oil", "Perilla Oil", "Korean A1 Hanwoo (Beef)",
-            "Pork Tenderloin", "Kurobuta Pork Belly", "Lamb Rack", "Whole Chicken"
+        const proteinIngredients = [
+            "Alaskan King Crab", "A5 Miyazaki Beef", "Bluefin Tuna", "Japanese Scallops",
+            "Wild Salmon", "Duck Breast", "Lobster Tail", "Foie Gras", "Uni (Sea Urchin)",
+            "Korean A1 Hanwoo (Beef)", "Pork Tenderloin", "Kurobuta Pork Belly", 
+            "Lamb Rack", "Whole Chicken", "Prosciutto di Parma", "Beluga Caviar"
+        ];
+
+        const nonProteinIngredients = [
+            "Black Truffle", "White Alba Truffle", "Bone Marrow",
+            "Porcini Mushrooms", "Aged Parmesan", "San Marzano Tomatoes", 
+            "Saffron", "Doenjang", "Yuzu", "Miso Paste", "Gochujang", 
+            "Kombu Seaweed", "Shiso Leaves", "Korean Pear", "Fresh Burrata", 
+            "Extra Virgin Olive Oil", "Fresh Basil", 
+            "Heirloom Tomatoes", "King Oyster Mushrooms", "Shiitake Mushrooms", 
+            "Sesame Oil", "Perilla Oil", "Fresh Figs", "Pomegranate", "Blood Orange"
         ];
 
         const badIngredients = [
@@ -231,19 +243,21 @@
 
             assignments = [];
             submissions = [];
-            const shuffledGood = shuffleArray(goodIngredients);
+            const shuffledProteins = shuffleArray(proteinIngredients);
+            const shuffledNonProteins = shuffleArray(nonProteinIngredients);
             const shuffledBad = shuffleArray(badIngredients);
             
             const badIngredientRecipients = shuffleArray([...Array(numContestants).keys()])
                 .slice(0, numBadIngredients);
 
             for (let i = 0; i < numContestants; i++) {
-                const numGoodIngredients = Math.floor(Math.random() * 2) + 4;
-                const goodIngs = shuffledGood.slice(i * 5, i * 5 + numGoodIngredients);
+                // Each contestant gets 1 protein + 1 non-protein
+                const protein = shuffledProteins[i % shuffledProteins.length];
+                const nonProtein = shuffledNonProteins[i % shuffledNonProteins.length];
                 
                 const assignment = {
                     contestant: `Contestant ${i + 1}`,
-                    goodIngredients: goodIngs,
+                    goodIngredients: [protein, nonProtein],
                     badIngredient: badIngredientRecipients.includes(i) ? shuffledBad[badIngredientRecipients.indexOf(i)] : null
                 };
                 
@@ -285,8 +299,8 @@
             document.getElementById('setupScreen').classList.add('hidden');
             document.getElementById('submissionScreen').classList.remove('hidden');
             
-            const dropdown = document.getElementById('contestantName');
-            dropdown.innerHTML = '<option value="">Select your contestant name...</option>';
+            const dropdown = document.getElementById('contestantSlot');
+            dropdown.innerHTML = '<option value="">Select your contestant slot...</option>';
             assignments.forEach((assignment, idx) => {
                 const option = document.createElement('option');
                 option.value = idx;
@@ -299,15 +313,21 @@
         }
 
         function updateIngredients() {
-            const dropdown = document.getElementById('contestantName');
+            const dropdown = document.getElementById('contestantSlot');
             const selectedIndex = dropdown.value;
             
             if (selectedIndex === '') {
                 document.getElementById('dishIngredients').value = '';
+                document.getElementById('contestantName').value = '';
                 return;
             }
             
             const assignment = assignments[selectedIndex];
+            
+            // Auto-fill the name field with the contestant slot name
+            document.getElementById('contestantName').value = assignment.contestant;
+            
+            // Fill ingredients
             let ingredientText = 'Good Ingredients:\n';
             ingredientText += assignment.goodIngredients.map(ing => `• ${ing}`).join('\n');
             
@@ -320,21 +340,21 @@
         }
 
         async function addSubmission() {
-            const contestantDropdown = document.getElementById('contestantName');
-            const selectedIndex = contestantDropdown.value;
-            const contestantName = contestantDropdown.options[contestantDropdown.selectedIndex].text;
+            const contestantSlot = document.getElementById('contestantSlot');
+            const selectedIndex = contestantSlot.value;
+            const contestantName = document.getElementById('contestantName').value.trim();
             const dishIngredients = document.getElementById('dishIngredients').value;
             const dishName = document.getElementById('dishName').value;
             const dishDescription = document.getElementById('dishDescription').value;
             const dishImageInput = document.getElementById('dishImage');
 
-            if (selectedIndex === '' || !dishName || !dishDescription) {
-                alert('Please fill in all required fields (contestant name, dish name, and description)');
+            if (selectedIndex === '' || !contestantName || !dishName || !dishDescription) {
+                alert('Please fill in all required fields (contestant slot, name, dish name, and description)');
                 return;
             }
 
             if (submissions.find(s => s.contestantIndex === parseInt(selectedIndex))) {
-                if (!confirm('This contestant has already submitted. Do you want to replace their submission?')) {
+                if (!confirm('This contestant slot has already submitted. Do you want to replace their submission?')) {
                     return;
                 }
                 submissions = submissions.filter(s => s.contestantIndex !== parseInt(selectedIndex));
@@ -363,6 +383,7 @@
                 imageMimeType
             });
 
+            document.getElementById('contestantSlot').value = '';
             document.getElementById('contestantName').value = '';
             document.getElementById('dishIngredients').value = '';
             document.getElementById('dishName').value = '';
@@ -425,7 +446,18 @@
             window.scrollTo(0, 0);
 
             try {
-                const judgmentPromises = submissions.map(async (sub) => {
+                // Sort submissions so Michelle is judged last
+                const sortedSubmissions = [...submissions].sort((a, b) => {
+                    const aHasMichelle = a.contestantName.toLowerCase().includes('michelle');
+                    const bHasMichelle = b.contestantName.toLowerCase().includes('michelle');
+                    if (aHasMichelle && !bHasMichelle) return 1;
+                    if (!aHasMichelle && bHasMichelle) return -1;
+                    return 0;
+                });
+
+                const judgmentPromises = sortedSubmissions.map(async (sub) => {
+                    const isMichelle = sub.contestantName.toLowerCase().includes('michelle');
+                    
                     const content = [
                         ...(sub.imageData ? [{
                             type: "image",
@@ -437,15 +469,19 @@
                         }] : []),
                         {
                             type: "text",
-                            text: `You are the judging panel from Culinary Class Wars (흑백요리사). Provide feedback in English as both Paik Jong Won and Anh Sung Jae with their DISTINCT personalities.
+                            text: `You are the judging panel from Culinary Class Wars (흑백요리사). Provide feedback as both Paik Jong Won and Anh Sung Jae with their DISTINCT personalities.
 
 **Contestant:** ${sub.contestantName}
 **Dish Name:** ${sub.dishName}
 **Ingredients:** ${sub.dishIngredients}
 **Description:** ${sub.dishDescription}
 
+${isMichelle ? `
+🎂 SPECIAL BIRTHDAY NOTE: This is ${sub.contestantName}'s birthday! After your normal judging, BOTH judges must add a warm, personal "Happy Birthday" message in their own distinct voices. Keep it heartfelt but brief (1-2 sentences each).
+` : ''}
+
 CRITICAL CONSTRAINTS:
-- Total feedback must be 200 words or less
+- Total feedback must be 250 words or less
 - Each judge has VERY different feedback styles - capture their personalities
 - Be concise and impactful
 
@@ -521,7 +557,8 @@ Make the scoring difference clear - Paik is the generous one, Anh is the tough c
                     return {
                         contestantName: sub.contestantName,
                         dishName: sub.dishName,
-                        judgment
+                        judgment,
+                        isMichelle
                     };
                 });
 
@@ -531,8 +568,8 @@ Make the scoring difference clear - Paik is the generous one, Anh is the tough c
 
                 const resultsContainer = document.getElementById('allJudgments');
                 resultsContainer.innerHTML = results.map((result, idx) => `
-                    <div class="glass-effect rounded-2xl p-8 animate-fade-in" style="animation-delay: ${idx * 0.1}s">
-                        <h3 class="text-2xl font-bold text-yellow-400 mb-2">${result.contestantName}</h3>
+                    <div class="glass-effect rounded-2xl p-8 animate-fade-in ${result.isMichelle ? 'border-2 border-yellow-400' : ''}" style="animation-delay: ${idx * 0.1}s">
+                        <h3 class="text-2xl font-bold text-yellow-400 mb-2">${result.contestantName}${result.isMichelle ? ' 🎂' : ''}</h3>
                         <p class="text-lg text-gray-300 mb-4 italic">"${result.dishName}"</p>
                         <div class="bg-gray-800 rounded-xl p-6 prose prose-invert max-w-none">
                             ${result.judgment.split('\n').map(line => {
